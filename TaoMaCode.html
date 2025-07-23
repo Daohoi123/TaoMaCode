@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trình Tạo Mã Vạch & QR Code</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+    <!-- Sử dụng QRious để tạo QR code -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-weight: 400;
+        }
+        .tab-button.active {
+            border-color: #3b82f6;
+            color: #3b82f6;
+            background-color: #eff6ff;
+        }
+        #qr-canvas-container {
+            display: none;
+        }
+        #barcode-svg-container {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+    <div class="w-full max-w-2xl bg-white rounded-2xl shadow-lg p-6 md:p-8">
+        <div class="text-center mb-6">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-800">Trình Tạo Mã Vạch & QR Code</h1>
+        </div>
+
+        <!-- Tabs -->
+        <div class="mb-6 border-b border-gray-200">
+            <nav class="flex space-x-4" aria-label="Tabs">
+                <button id="tab-single" class="tab-button active text-sm font-medium py-3 px-4 rounded-t-lg border-b-2 border-transparent hover:border-gray-300 hover:text-gray-600 focus:outline-none">
+                    Tạo Đơn
+                </button>
+                <button id="tab-batch" class="tab-button text-sm font-medium py-3 px-4 rounded-t-lg border-b-2 border-transparent hover:border-gray-300 hover:text-gray-600 focus:outline-none">
+                    Tạo Hàng Loạt (Excel)
+                </button>
+            </nav>
+        </div>
+
+        <!-- Shared Options -->
+        <div class="mb-4">
+            <label for="format-select" class="block text-sm font-medium text-gray-700 mb-1">Loại mã</label>
+            <select id="format-select" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                <option value="CODE128" selected>Code 128</option>
+                <option value="CODE39">Code 39</option>
+                <option value="EAN13">EAN-13</option>
+                <option value="QR">QR Code</option>
+            </select>
+        </div>
+
+        <!-- Single Generator Tab -->
+        <div id="panel-single">
+            <div class="space-y-4">
+                <div>
+                    <label for="barcode-text" class="block text-sm font-medium text-gray-700 mb-1">Dữ liệu</label>
+                    <input type="text" id="barcode-text" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" value="ABC-abc-1234">
+                </div>
+                <button id="generate-btn" class="w-full bg-blue-600 text-white font-semibold py-2.5 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                    Tạo Mã
+                </button>
+            </div>
+
+            <div id="output-container" class="mt-6 text-center hidden">
+                <h3 class="text-lg font-semibold text-gray-800 mb-2">Kết quả</h3>
+                <div class="p-4 border rounded-lg inline-block bg-white">
+                    <div id="barcode-svg-container">
+                        <svg id="barcode-svg"></svg>
+                    </div>
+                    <div id="qr-canvas-container">
+                        <canvas id="qr-canvas"></canvas>
+                    </div>
+                </div>
+                <p id="output-error" class="text-red-500 mt-2"></p>
+                <button id="download-pdf-btn" class="mt-4 w-full bg-green-600 text-white font-semibold py-2.5 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
+                    Tải xuống PDF
+                </button>
+            </div>
+        </div>
+
+        <!-- Batch Generator Tab -->
+        <div id="panel-batch" class="hidden">
+            <div class="space-y-4">
+                <div>
+                    <label for="excel-file" class="block text-sm font-medium text-gray-700 mb-1">Tệp Excel (.xlsx, .xls)</label>
+                    <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                        <div class="space-y-1 text-center">
+                            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                            <div class="flex text-sm text-gray-600">
+                                <label for="excel-file-input" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                                    <span>Tải tệp lên</span>
+                                    <input id="excel-file-input" name="excel-file" type="file" class="sr-only" accept=".xlsx, .xls">
+                                </label>
+                                <p class="pl-1">hoặc kéo và thả</p>
+                            </div>
+                            <p class="text-xs text-gray-500">Dữ liệu mã vạch phải ở cột đầu tiên.</p>
+                            <p id="file-name" class="text-sm text-gray-800 font-medium mt-2"></p>
+                        </div>
+                    </div>
+                </div>
+                <button id="generate-batch-btn" class="w-full bg-blue-600 text-white font-semibold py-2.5 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors" disabled>
+                    Tạo & Tải PDF Hàng Loạt
+                </button>
+                 <div id="batch-loader" class="text-center mt-4 hidden">
+                    <div role="status" class="inline-block">
+                        <svg aria-hidden="true" class="w-8 h-8 text-gray-200 animate-spin dark:text-gray-600 fill-blue-600" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z" fill="currentColor"/><path d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0492C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5424 39.6781 93.9676 39.0409Z" fill="currentFill"/></svg>
+                        <span class="sr-only">Đang xử lý...</span>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-2">Đang tạo PDF, vui lòng chờ...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Library Initialization ---
+        const { jsPDF } = window.jspdf;
+
+        // --- DOM Elements ---
+        const tabSingle = document.getElementById('tab-single');
+        const tabBatch = document.getElementById('tab-batch');
+        const panelSingle = document.getElementById('panel-single');
+        const panelBatch = document.getElementById('panel-batch');
+        
+        const formatSelect = document.getElementById('format-select');
+        const textInput = document.getElementById('barcode-text');
+        const generateBtn = document.getElementById('generate-btn');
+        
+        const outputContainer = document.getElementById('output-container');
+        const barcodeSvgContainer = document.getElementById('barcode-svg-container');
+        const qrCanvasContainer = document.getElementById('qr-canvas-container');
+        const barcodeSvg = document.getElementById('barcode-svg');
+        const qrCanvas = document.getElementById('qr-canvas');
+        const outputError = document.getElementById('output-error');
+        const downloadPdfBtn = document.getElementById('download-pdf-btn');
+
+        const fileInput = document.getElementById('excel-file-input');
+        const fileNameDisplay = document.getElementById('file-name');
+        const generateBatchBtn = document.getElementById('generate-batch-btn');
+        const batchLoader = document.getElementById('batch-loader');
+        
+        let excelFile = null;
+
+        // --- Tab Switching Logic ---
+        tabSingle.addEventListener('click', () => {
+            tabSingle.classList.add('active');
+            tabBatch.classList.remove('active');
+            panelSingle.style.display = 'block';
+            panelBatch.style.display = 'none';
+        });
+
+        tabBatch.addEventListener('click', () => {
+            tabBatch.classList.add('active');
+            tabSingle.classList.remove('active');
+            panelBatch.style.display = 'block';
+            panelSingle.style.display = 'none';
+        });
+
+        // --- Main Generation Logic ---
+        function generateOutput() {
+            const format = formatSelect.value;
+            const text = textInput.value.trim();
+            
+            outputContainer.classList.remove('hidden');
+            outputError.textContent = '';
+            downloadPdfBtn.classList.add('hidden');
+
+            // Toggle visibility of containers
+            barcodeSvgContainer.style.display = (format === 'QR') ? 'none' : 'block';
+            qrCanvasContainer.style.display = (format === 'QR') ? 'block' : 'none';
+
+            if (!text) {
+                outputError.textContent = 'Vui lòng nhập dữ liệu để tạo mã.';
+                return;
+            }
+            
+            try {
+                if (format === 'QR') {
+                    // Sử dụng QRious để tạo QR code
+                    new QRious({
+                        element: qrCanvas,
+                        value: text,
+                        size: 256,
+                        padding: 10,
+                        level: 'H' // Mức độ sửa lỗi cao
+                    });
+                    downloadPdfBtn.classList.remove('hidden');
+                } else {
+                    // Validation for EAN13
+                    if (format === 'EAN13' && !/^\d{12,13}$/.test(text)) {
+                       throw new Error('EAN-13 yêu cầu 12 hoặc 13 chữ số.');
+                    }
+                    
+                    // Define base options
+                    const options = {
+                        format: format,
+                        lineColor: "#000",
+                        width: 2,
+                        height: 80,
+                        displayValue: true,
+                        font: "sans-serif",
+                        fontOptions: "normal",
+                        fontWeight: "400",
+                        fontSize: 18,
+                        margin: 10 
+                    };
+
+                    // FIX: Override options specifically for EAN13
+                    if (format === 'EAN13') {
+                        options.fontSize = 22;
+                        options.textMargin = 5;
+                        options.margin = 10;
+                    }
+
+                    JsBarcode(barcodeSvg, text, options);
+
+                    // FIX: Manually manipulate SVG for EAN13 to get the first digit closer
+                    if (format === 'EAN13') {
+                        setTimeout(() => {
+                            const textElements = barcodeSvg.querySelectorAll('text');
+                            if (textElements.length > 1) {
+                                const firstDigit = textElements[0];
+                                firstDigit.setAttribute('transform', 'translate(8)');
+                            }
+                        }, 0);
+                    }
+
+                    downloadPdfBtn.classList.remove('hidden');
+                }
+            } catch (e) {
+                console.error(e);
+                outputError.textContent = e.message || `Dữ liệu không hợp lệ cho ${format}.`;
+                if (format !== 'QR') JsBarcode(barcodeSvg).init();
+            }
+        }
+        
+        // --- Event Listeners ---
+        generateBtn.addEventListener('click', generateOutput);
+        
+        formatSelect.addEventListener('change', () => {
+            const format = formatSelect.value;
+            switch(format) {
+                case 'CODE128':
+                    textInput.value = 'ABC-abc-1234';
+                    break;
+                case 'CODE39':
+                    textInput.value = 'ABC-1234';
+                    break;
+                case 'EAN13':
+                    textInput.value = '978020137962';
+                    break;
+                case 'QR':
+                    textInput.value = 'This is a QR Code';
+                    break;
+            }
+            generateOutput();
+        });
+
+        textInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault(); 
+                generateOutput();
+            }
+        });
+
+
+        // --- PDF Download Logic ---
+        downloadPdfBtn.addEventListener('click', async () => {
+            const text = textInput.value.trim();
+            if (!text) return;
+
+            const format = formatSelect.value;
+            let dataUrl;
+
+            try {
+                if (format === 'QR') {
+                    dataUrl = qrCanvas.toDataURL('image/jpeg', 0.9);
+                } else {
+                    dataUrl = await svgToImageDataURL(barcodeSvg);
+                }
+
+                const doc = new jsPDF({
+                    orientation: 'landscape',
+                    unit: 'mm',
+                    format: 'a6'
+                });
+
+                const pdfWidth = doc.internal.pageSize.getWidth();
+                const pdfHeight = doc.internal.pageSize.getHeight();
+                
+                const imgProps = doc.getImageProperties(dataUrl);
+                const aspectRatio = imgProps.width / imgProps.height;
+                let imgWidth = pdfWidth - 20; 
+                let imgHeight = imgWidth / aspectRatio;
+                
+                if (imgHeight > pdfHeight - 20) {
+                    imgHeight = pdfHeight - 20;
+                    imgWidth = imgHeight * aspectRatio;
+                }
+
+                const x = (pdfWidth - imgWidth) / 2;
+                const y = (pdfHeight - imgHeight) / 2;
+
+                doc.addImage(dataUrl, 'JPEG', x, y, imgWidth, imgHeight);
+                doc.save(`${format.toLowerCase()}-${text}.pdf`);
+            } catch (error) {
+                console.error("Lỗi khi tạo PDF:", error);
+                outputError.textContent = "Không thể tạo file PDF.";
+            }
+        });
+        
+        // --- Batch Generation Logic ---
+        fileInput.addEventListener('change', (event) => {
+            excelFile = event.target.files[0];
+            if (excelFile) {
+                fileNameDisplay.textContent = excelFile.name;
+                generateBatchBtn.disabled = false;
+            } else {
+                fileNameDisplay.textContent = '';
+                generateBatchBtn.disabled = true;
+            }
+        });
+
+        generateBatchBtn.addEventListener('click', () => {
+            if (!excelFile) return;
+            
+            batchLoader.classList.remove('hidden');
+            generateBatchBtn.disabled = true;
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                    const codes = json.map(row => row[0]).filter(code => code != null && code.toString().trim() !== '');
+
+                    if (codes.length === 0) {
+                        throw new Error('Không tìm thấy dữ liệu trong cột đầu tiên của tệp Excel.');
+                    }
+                    
+                    await createBatchPdf(codes, formatSelect.value);
+                } catch (error) {
+                    console.error(error);
+                    alert(error.message);
+                } finally {
+                     batchLoader.classList.add('hidden');
+                    generateBatchBtn.disabled = false;
+                    fileInput.value = '';
+                    fileNameDisplay.textContent = '';
+                    excelFile = null;
+                }
+            };
+            reader.readAsArrayBuffer(excelFile);
+        });
+
+        async function createBatchPdf(codes, format) {
+            const doc = new jsPDF({
+                orientation: 'landscape',
+                unit: 'mm',
+                format: 'a6'
+            });
+
+            for (let i = 0; i < codes.length; i++) {
+                const code = codes[i].toString();
+                if (i > 0) {
+                    doc.addPage();
+                }
+                
+                let dataUrl;
+                try {
+                    if (format === 'QR') {
+                        const tempCanvas = document.createElement('canvas');
+                        new QRious({
+                            element: tempCanvas,
+                            value: code,
+                            size: 256,
+                            padding: 10,
+                            level: 'H'
+                        });
+                        dataUrl = tempCanvas.toDataURL('image/jpeg', 0.9);
+                    } else {
+                        const tempSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                        
+                        const options = {
+                            format: format,
+                            lineColor: "#000",
+                            width: 2,
+                            height: 80,
+                            displayValue: true,
+                            font: "sans-serif",
+                            fontOptions: "normal",
+                            fontWeight: "400",
+                            fontSize: 18,
+                            margin: 10
+                        };
+                        
+                        if (format === 'EAN13') {
+                            options.fontSize = 22;
+                            options.textMargin = 5;
+                            options.margin = 10;
+                        }
+                        
+                        JsBarcode(tempSvg, code, options);
+                        
+                        if (format === 'EAN13') {
+                            await new Promise(resolve => setTimeout(resolve, 0));
+                            const textElements = tempSvg.querySelectorAll('text');
+                            if (textElements.length > 1) {
+                                textElements[0].setAttribute('transform', 'translate(8)');
+                            }
+                        }
+
+                        dataUrl = await svgToImageDataURL(tempSvg);
+                    }
+
+                    const pdfWidth = doc.internal.pageSize.getWidth();
+                    const pdfHeight = doc.internal.pageSize.getHeight();
+                    const imgProps = doc.getImageProperties(dataUrl);
+                    const aspectRatio = imgProps.width / imgProps.height;
+                    let imgWidth = pdfWidth - 20;
+                    let imgHeight = imgWidth / aspectRatio;
+                    
+                    if (imgHeight > pdfHeight - 20) {
+                        imgHeight = pdfHeight - 20;
+                        imgWidth = imgHeight * aspectRatio;
+                    }
+
+                    const x = (pdfWidth - imgWidth) / 2;
+                    const y = (pdfHeight - imgHeight) / 2;
+                    doc.addImage(dataUrl, 'JPEG', x, y, imgWidth, imgHeight);
+
+                } catch(e) {
+                    doc.setFontSize(10);
+                    doc.text(`Lỗi tạo mã cho: ${code.substring(0, 50)}`, 10, 20);
+                    doc.text(`Lỗi: ${e.message.substring(0, 100)}`, 10, 30);
+                    console.error(`Không thể tạo mã cho: ${code}`, e);
+                }
+            }
+            doc.save(`barcodes-batch-${format.toLowerCase()}.pdf`);
+        }
+
+        function svgToImageDataURL(svgElement) {
+            return new Promise((resolve, reject) => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const svgData = new XMLSerializer().serializeToString(svgElement);
+                    const ctx = canvas.getContext('2d');
+                    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                    const url = URL.createObjectURL(svgBlob);
+                    const img = new Image();
+
+                    img.onload = () => {
+                        const scaleFactor = 5; 
+                        canvas.width = img.width * scaleFactor;
+                        canvas.height = img.height * scaleFactor;
+                        
+                        ctx.fillStyle = 'white';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        
+                        ctx.scale(scaleFactor, scaleFactor);
+                        ctx.drawImage(img, 0, 0);
+
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                        URL.revokeObjectURL(url);
+                        resolve(dataUrl);
+                    };
+                    img.onerror = () => {
+                        URL.revokeObjectURL(url);
+                        reject(new Error("Không thể tải hình ảnh SVG."));
+                    }
+                    img.src = url;
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        }
+
+        // --- Initial State ---
+        window.onload = () => {
+            generateOutput();
+        };
+
+    </script>
+</body>
+</html>
