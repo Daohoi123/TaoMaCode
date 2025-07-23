@@ -287,30 +287,24 @@
                     dataUrl = await svgToImageDataURL(barcodeSvg);
                 }
 
-                const doc = new jsPDF({
-                    orientation: 'landscape',
-                    unit: 'mm',
-                    format: 'a6'
-                });
+                // FIX: Create PDF with size matching the image
+                const img = new Image();
+                img.onload = () => {
+                    const pdfWidth = img.width;
+                    const pdfHeight = img.height;
+                    const orientation = pdfWidth > pdfHeight ? 'landscape' : 'portrait';
 
-                const pdfWidth = doc.internal.pageSize.getWidth();
-                const pdfHeight = doc.internal.pageSize.getHeight();
-                
-                const imgProps = doc.getImageProperties(dataUrl);
-                const aspectRatio = imgProps.width / imgProps.height;
-                let imgWidth = pdfWidth - 20; 
-                let imgHeight = imgWidth / aspectRatio;
-                
-                if (imgHeight > pdfHeight - 20) {
-                    imgHeight = pdfHeight - 20;
-                    imgWidth = imgHeight * aspectRatio;
-                }
+                    const doc = new jsPDF({
+                        orientation: orientation,
+                        unit: 'pt', // Use points to map pixels 1:1
+                        format: [pdfWidth, pdfHeight]
+                    });
 
-                const x = (pdfWidth - imgWidth) / 2;
-                const y = (pdfHeight - imgHeight) / 2;
+                    doc.addImage(dataUrl, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+                    doc.save(`${format.toLowerCase()}-${text}.pdf`);
+                };
+                img.src = dataUrl;
 
-                doc.addImage(dataUrl, 'JPEG', x, y, imgWidth, imgHeight);
-                doc.save(`${format.toLowerCase()}-${text}.pdf`);
             } catch (error) {
                 console.error("Lỗi khi tạo PDF:", error);
                 outputError.textContent = "Không thể tạo file PDF.";
@@ -366,17 +360,10 @@
         });
 
         async function createBatchPdf(codes, format) {
-            const doc = new jsPDF({
-                orientation: 'landscape',
-                unit: 'mm',
-                format: 'a6'
-            });
+            let doc;
 
             for (let i = 0; i < codes.length; i++) {
                 const code = codes[i].toString();
-                if (i > 0) {
-                    doc.addPage();
-                }
                 
                 let dataUrl;
                 try {
@@ -425,30 +412,47 @@
                         dataUrl = await svgToImageDataURL(tempSvg);
                     }
 
-                    const pdfWidth = doc.internal.pageSize.getWidth();
-                    const pdfHeight = doc.internal.pageSize.getHeight();
-                    const imgProps = doc.getImageProperties(dataUrl);
-                    const aspectRatio = imgProps.width / imgProps.height;
-                    let imgWidth = pdfWidth - 20;
-                    let imgHeight = imgWidth / aspectRatio;
-                    
-                    if (imgHeight > pdfHeight - 20) {
-                        imgHeight = pdfHeight - 20;
-                        imgWidth = imgHeight * aspectRatio;
-                    }
+                    // FIX: Create PDF pages with size matching each image
+                    await new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const pdfWidth = img.width;
+                            const pdfHeight = img.height;
+                            const orientation = pdfWidth > pdfHeight ? 'landscape' : 'portrait';
 
-                    const x = (pdfWidth - imgWidth) / 2;
-                    const y = (pdfHeight - imgHeight) / 2;
-                    doc.addImage(dataUrl, 'JPEG', x, y, imgWidth, imgHeight);
+                            if (i === 0) {
+                                doc = new jsPDF({
+                                    orientation: orientation,
+                                    unit: 'pt',
+                                    format: [pdfWidth, pdfHeight]
+                                });
+                            } else {
+                                doc.addPage([pdfWidth, pdfHeight], orientation);
+                            }
+                            doc.addImage(dataUrl, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+                            resolve();
+                        };
+                        img.onerror = reject;
+                        img.src = dataUrl;
+                    });
+
 
                 } catch(e) {
+                    // If an image fails, add an error page to the PDF
+                    if (i === 0) { // If it's the first one, create the doc
+                         doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a6' });
+                    } else {
+                        doc.addPage('a6', 'l');
+                    }
                     doc.setFontSize(10);
                     doc.text(`Lỗi tạo mã cho: ${code.substring(0, 50)}`, 10, 20);
                     doc.text(`Lỗi: ${e.message.substring(0, 100)}`, 10, 30);
                     console.error(`Không thể tạo mã cho: ${code}`, e);
                 }
             }
-            doc.save(`barcodes-batch-${format.toLowerCase()}.pdf`);
+            if(doc) {
+                doc.save(`barcodes-batch-${format.toLowerCase()}.pdf`);
+            }
         }
 
         function svgToImageDataURL(svgElement) {
@@ -462,7 +466,7 @@
                     const img = new Image();
 
                     img.onload = () => {
-                        const scaleFactor = 5; 
+                        const scaleFactor = 3; // Reduced scale factor for smaller file size
                         canvas.width = img.width * scaleFactor;
                         canvas.height = img.height * scaleFactor;
                         
@@ -472,7 +476,7 @@
                         ctx.scale(scaleFactor, scaleFactor);
                         ctx.drawImage(img, 0, 0);
 
-                        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.9); // Use JPEG
                         URL.revokeObjectURL(url);
                         resolve(dataUrl);
                     };
